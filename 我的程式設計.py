@@ -61,3 +61,4 @@ info_label.pack(pady=10)
 # 啟動 Tkinter 的事件迴圈（必要）
 # ----------------------------
 win.mainloop()
+#end of file
