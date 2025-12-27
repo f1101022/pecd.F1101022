@@ -1,153 +1,254 @@
 import tkinter as tk
 import random
+import time
+import os
 
-# =====================
-# 基本設定
-# =====================
-CELL = 20          # 每格大小
-WIDTH = 20         # 寬度格數
-HEIGHT = 20        # 高度格數
-DELAY = 200        # 移動速度（毫秒）
+# ======================
+# 遊戲基本設定
+# ======================
+WINDOW_SIZE = 500      # 視窗大小
+GRID_SIZE = 20         # 每一格的大小
+GRID_COUNT = WINDOW_SIZE // GRID_SIZE
 
-# =====================
-# 建立視窗
-# =====================
-root = tk.Tk()
-root.title("貪食蛇（全新版本）")
-root.geometry("420x460")
-root.resizable(False, False)
+# 不同難度對應的速度（毫秒，越小越快）
+DIFFICULTY_SPEED = {
+    "簡單": 200,
+    "普通": 120,
+    "困難": 80
+}
 
-# =====================
-# 分數顯示
-# =====================
-score = 0
-score_label = tk.Label(root, text="分數：0", font=("Arial", 14))
-score_label.pack()
+HIGH_SCORE_FILE = "highscore.txt"
 
-# =====================
-# 畫布
-# =====================
-canvas = tk.Canvas(
-    root,
-    width=WIDTH * CELL,
-    height=HEIGHT * CELL,
-    bg="white"
-)
-canvas.pack()
 
-# =====================
-# 遊戲資料
-# =====================
-snake = [(10, 10), (9, 10), (8, 10)]
-direction = "Right"
-food = (5, 5)
-game_over = False
+# ======================
+# 讀取最高分
+# ======================
+def load_high_score():
+    if os.path.exists(HIGH_SCORE_FILE):
+        with open(HIGH_SCORE_FILE, "r", encoding="utf-8") as f:
+            return int(f.read())
+    return 0
 
-# =====================
-# 重新開始
-# =====================
-def restart():
-    global snake, direction, food, score, game_over
 
-    snake = [(10, 10), (9, 10), (8, 10)]
-    direction = "Right"
-    food = (random.randint(0, WIDTH-1), random.randint(0, HEIGHT-1))
-    score = 0
-    game_over = False
-    score_label.config(text="分數：0")
-    draw()
-    move()
+# ======================
+# 儲存最高分
+# ======================
+def save_high_score(score):
+    with open(HIGH_SCORE_FILE, "w", encoding="utf-8") as f:
+        f.write(str(score))
 
-# =====================
-# 畫圖
-# =====================
-def draw():
-    canvas.delete("all")
 
-    # 畫蛇
-    for x, y in snake:
-        canvas.create_rectangle(
-            x*CELL, y*CELL,
-            (x+1)*CELL, (y+1)*CELL,
-            fill="green"
+# ======================
+# 貪食蛇遊戲類別
+# ======================
+class SnakeGame:
+    def __init__(self, root, difficulty):
+        self.root = root
+        self.root.title("貪食蛇遊戲")
+
+        # 遊戲狀態
+        self.speed = DIFFICULTY_SPEED[difficulty]
+        self.score = 0
+        self.high_score = load_high_score()
+        self.start_time = time.time()
+        self.game_running = True
+
+        # 蛇的初始位置（座標）
+        self.snake = [(5, 5), (4, 5), (3, 5)]
+        self.direction = "Right"
+
+        # 產生食物
+        self.food = self.create_food()
+
+        # ======================
+        # 建立畫布
+        # ======================
+        self.canvas = tk.Canvas(
+            self.root,
+            width=WINDOW_SIZE,
+            height=WINDOW_SIZE,
+            bg="black"
+        )
+        self.canvas.pack()
+
+        # ⭐⭐⭐ 關鍵：強制鍵盤焦點 ⭐⭐⭐
+        self.root.focus_force()
+        self.canvas.focus_set()
+
+        # 資訊顯示標籤
+        self.info_label = tk.Label(
+            self.root,
+            font=("微軟正黑體", 12)
+        )
+        self.info_label.pack(pady=5)
+
+        # 綁定方向鍵
+        self.canvas.bind("<Up>", lambda e: self.change_direction("Up"))
+        self.canvas.bind("<Down>", lambda e: self.change_direction("Down"))
+        self.canvas.bind("<Left>", lambda e: self.change_direction("Left"))
+        self.canvas.bind("<Right>", lambda e: self.change_direction("Right"))
+
+        # 開始遊戲迴圈
+        self.update_game()
+
+    # ======================
+    # 隨機產生食物
+    # ======================
+    def create_food(self):
+        while True:
+            pos = (
+                random.randint(0, GRID_COUNT - 1),
+                random.randint(0, GRID_COUNT - 1)
+            )
+            if pos not in self.snake:
+                return pos
+
+    # ======================
+    # 改變移動方向（防止反向）
+    # ======================
+    def change_direction(self, new_direction):
+        opposite = {
+            "Up": "Down",
+            "Down": "Up",
+            "Left": "Right",
+            "Right": "Left"
+        }
+        if new_direction != opposite[self.direction]:
+            self.direction = new_direction
+
+    # ======================
+    # 遊戲主更新迴圈
+    # ======================
+    def update_game(self):
+        if not self.game_running:
+            return
+
+        head_x, head_y = self.snake[0]
+
+        # 根據方向計算新頭部位置
+        if self.direction == "Up":
+            head_y -= 1
+        elif self.direction == "Down":
+            head_y += 1
+        elif self.direction == "Left":
+            head_x -= 1
+        elif self.direction == "Right":
+            head_x += 1
+
+        new_head = (head_x, head_y)
+
+        # 撞牆或撞到自己 → 遊戲結束
+        if (
+            head_x < 0 or head_x >= GRID_COUNT or
+            head_y < 0 or head_y >= GRID_COUNT or
+            new_head in self.snake
+        ):
+            self.game_over()
+            return
+
+        self.snake.insert(0, new_head)
+
+        # 吃到食物
+        if new_head == self.food:
+            self.score += 10
+            self.food = self.create_food()
+        else:
+            self.snake.pop()
+
+        self.draw()
+
+        # 下一次更新
+        self.root.after(self.speed, self.update_game)
+
+    # ======================
+    # 繪製畫面
+    # ======================
+    def draw(self):
+        self.canvas.delete("all")
+
+        # 畫蛇
+        for x, y in self.snake:
+            self.canvas.create_rectangle(
+                x * GRID_SIZE,
+                y * GRID_SIZE,
+                (x + 1) * GRID_SIZE,
+                (y + 1) * GRID_SIZE,
+                fill="lime"
+            )
+
+        # 畫食物
+        fx, fy = self.food
+        self.canvas.create_oval(
+            fx * GRID_SIZE,
+            fy * GRID_SIZE,
+            (fx + 1) * GRID_SIZE,
+            (fy + 1) * GRID_SIZE,
+            fill="red"
         )
 
-    # 畫食物
-    fx, fy = food
-    canvas.create_oval(
-        fx*CELL, fy*CELL,
-        (fx+1)*CELL, (fy+1)*CELL,
-        fill="red"
-    )
+        # 更新時間
+        elapsed = int(time.time() - self.start_time)
 
-# =====================
-# 鍵盤控制
-# =====================
-def key(event):
-    global direction
-    if event.keysym in ["Up", "Down", "Left", "Right"]:
-        direction = event.keysym
-
-# =====================
-# 蛇移動
-# =====================
-def move():
-    global food, score, game_over
-
-    if game_over:
-        return
-
-    x, y = snake[0]
-
-    if direction == "Up":
-        new = (x, y-1)
-    elif direction == "Down":
-        new = (x, y+1)
-    elif direction == "Left":
-        new = (x-1, y)
-    else:
-        new = (x+1, y)
-
-    # 撞牆或撞自己
-    if (
-        new[0] < 0 or new[0] >= WIDTH or
-        new[1] < 0 or new[1] >= HEIGHT or
-        new in snake
-    ):
-        game_over = True
-        canvas.create_text(
-            WIDTH*CELL/2,
-            HEIGHT*CELL/2,
-            text="遊戲結束",
-            font=("Arial", 24)
+        # 更新資訊文字
+        self.info_label.config(
+            text=f"分數：{self.score} ｜ 最高分：{self.high_score} ｜ 時間：{elapsed} 秒"
         )
-        return
 
-    snake.insert(0, new)
+    # ======================
+    # 遊戲結束
+    # ======================
+    def game_over(self):
+        self.game_running = False
 
-    # 吃到食物
-    if new == food:
-        score += 10
-        score_label.config(text=f"分數：{score}")
-        food = (random.randint(0, WIDTH-1), random.randint(0, HEIGHT-1))
-    else:
-        snake.pop()
+        if self.score > self.high_score:
+            save_high_score(self.score)
 
-    draw()
-    root.after(DELAY, move)
+        self.canvas.create_text(
+            WINDOW_SIZE // 2,
+            WINDOW_SIZE // 2,
+            text="遊戲結束\n請關閉視窗",
+            fill="white",
+            font=("微軟正黑體", 24),
+            justify="center"
+        )
 
-# =====================
-# 重新開始按鈕
-# =====================
-btn = tk.Button(root, text="重新開始", font=("Arial", 12), command=restart)
-btn.pack(pady=5)
 
-# =====================
-# 啟動遊戲
-# =====================
-root.bind("<Key>", key)
-root.focus_force()
+# ======================
+# 主選單畫面
+# ======================
+def start_menu():
+    root = tk.Tk()
+    root.title("貪食蛇 - 選擇難度")
 
-draw()
-move()
-root.mainloop()
+    tk.Label(
+        root,
+        text="貪食蛇遊戲",
+        font=("微軟正黑體", 20)
+    ).pack(pady=10)
+
+    def start_game(difficulty):
+        # 清除選單畫面
+        for widget in root.winfo_children():
+            widget.destroy()
+
+        # 啟動遊戲
+        SnakeGame(root, difficulty)
+
+    # 建立難度按鈕
+    for diff in DIFFICULTY_SPEED:
+        tk.Button(
+            root,
+            text=diff,
+            font=("微軟正黑體", 14),
+            width=15,
+            command=lambda d=diff: start_game(d)
+        ).pack(pady=5)
+
+    root.mainloop()
+
+
+# ======================
+# 程式進入點
+# ======================
+if __name__ == "__main__":
+    start_menu()s
